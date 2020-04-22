@@ -1,0 +1,33 @@
+Bootstrap: docker 
+From: ubuntu:18.04
+
+%environment
+    # avoid warning about inability to change locale
+    LC_ALL="C"
+    export LC_ALL
+    export MODULEPATH=/global/software/sl-7.x86_64/modfiles/langs:/global/software/sl-7.x86_64/modfiles/tools:/global/software/sl-7.x86_64/modfiles/apps:/global/home/groups/consultsw/sl-7.x86_64/modfiles:/clusterfs/vector/home/groups/software/sl-7.x86_64/modfiles
+
+%post
+    mkdir -p /global/home/users
+    mkdir -p /global/scratch
+    apt-get -y update
+    apt-get -y install libxss1
+    apt-get install -y libpcre3 libpcre3-dev
+    apt-get install -y libtcl8.5
+    apt-get install -y tcl8.5
+    apt-get install -y libglib2.0-0
+    apt-get install -y libxtst6
+    apt-get install -y libxt6
+    apt-get install -y libgl1-mesa-glx
+    apt-get install -y libglu1-mesa
+    apt-get install -y libsm6
+    apt-get install -y libxrender1
+    apt-get install -y libfontconfig1
+    apt-get install -y gcc
+    apt-get upgrade -y libstdc++6
+    apt-get install -y libnss3
+    apt-get install -y libnss3-tools
+    apt-get install -y firefox
+    apt-get install -y environment-modules
+
+
