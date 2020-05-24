@@ -137,6 +137,7 @@ def prep_val(f_seq, exp_seq, scratch_dict):
 def train(f_seq, exp_seq, scratch_dict, init_val, end_val):
     sample_list_dict = os.path.join(scratch_dict, 'linc3132/' + f_seq + '/data/sample_list', exp_seq)
     trn_file = 'trn_sample.npy'
+    #file names for only training
     trn_sample = np.load(os.path.join(sample_list_dict, trn_file))
 
     patch_size = 256
@@ -382,3 +383,6 @@ def test(f_seq, exp_seq, scratch_dict, kt):
         misc.imsave(os.path.join(res_save_dict, tst_case, tst_case + '_img.png'), img)
         misc.imsave(os.path.join(res_save_dict, tst_case, tst_case + '_cnn_mask.png'), pred_mask)
     return
+
+
+
