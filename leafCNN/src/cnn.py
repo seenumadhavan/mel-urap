@@ -137,20 +137,23 @@ def prep_val(f_seq, exp_seq, scratch_dict):
 def train(f_seq, exp_seq, scratch_dict, init_val, end_val):
     sample_list_dict = os.path.join(scratch_dict, 'linc3132/' + f_seq + '/data/sample_list', exp_seq)
     trn_file = 'trn_sample.npy'
-    #file names for only training
+    #original images
     trn_sample = np.load(os.path.join(sample_list_dict, trn_file))
 
     patch_size = 256
     patch_per_batch = 32
     data_folder = os.path.join(scratch_dict, 'linc3132/data/Leaf_vein_augment')
 
+    #processed patches
     val_dict = os.path.join(scratch_dict, 'linc3132/' + f_seq + '/data/val_data')
     for k_init in range(init_val, end_val, 1):
         print('Epoch:', str(k_init + 1))
+        #number of epochs
         k_init += 1
         img_trn = np.ndarray((trn_sample.__len__() * patch_per_batch, patch_size, patch_size, 1), dtype='float32')
         seg_trn = np.ndarray((trn_sample.__len__() * patch_per_batch, patch_size, patch_size, 1), dtype='float32')
         ks = 0
+        #going through each original image
         for sample_train in trn_sample:
             ks += 1
             sample_folder = os.path.join(data_folder, sample_train)
@@ -168,8 +171,10 @@ def train(f_seq, exp_seq, scratch_dict, init_val, end_val):
         seg_train = np.concatenate((seg_trn, seg_val), axis=0)
         val_split = img_val.__len__() / img_train.__len__()
 
+        #a single folder for every model
         model_folder = os.path.join(scratch_dict, 'linc3132/' + f_seq + '/model', exp_seq)
         model_list = os.listdir(model_folder)
+        #only for first model
         if model_list.__len__() == 0:
             patch_rows = 256
             patch_cols = 256
@@ -237,10 +242,12 @@ def train(f_seq, exp_seq, scratch_dict, init_val, end_val):
         else:
             model_file = model_list[-1]
             model_idx_list = []
+            #iterating through each model file
             for model_sample in model_list:
                 model_idx = int(model_sample[8:10])
                 model_idx_list.append(model_idx)
             epoch_number = int(np.max(model_idx_list))
+            #constructing file name?
             if epoch_number < 10:
                 model_file_ref = model_file[0:8] + '0' + str(epoch_number) + model_file[10:11]
             else:
@@ -270,6 +277,7 @@ def train(f_seq, exp_seq, scratch_dict, init_val, end_val):
 
 
 def val_dice(f_seq, exp_seq, scratch_dict):
+    #all patches
     file_dict = os.path.join(scratch_dict, 'linc3132/' + f_seq + '/data/val_data', exp_seq)
     img_val_set = np.load(os.path.join(file_dict, 'img_val_1.npy'))
     seg_val_set = np.load(os.path.join(file_dict, 'seg_val_1.npy'))
@@ -279,6 +287,7 @@ def val_dice(f_seq, exp_seq, scratch_dict):
     epoch_number = 0
     model_file_init = model_list_init[0]
     model_list = []
+    #hopefully clarified by 242-262
     for model_num in range(len(model_list_init)):
         epoch_number += 1
         if epoch_number < 10:

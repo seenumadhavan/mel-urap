@@ -21,11 +21,14 @@ def dice(bm_pred, bm_val):
     return dice_similarity
 
 
-def prep_val():
+def prep_val(): #takes in f_seq, exp_seq, scratch_dict
     #assuming this script is run from the badLeafCNN folder
-    #sample_list_dict = os.getcwd()
+    #sample_list_dict = os.path.join(scratch_dict + '/linc3132/' + f_seq + '/data/sample_list', exp_seq)
     #val_file = 'val_sample.npy'
     #val_sample = np.load(os.path.join(sample_list_dict, val_file))
+    #f_seq is full res
+
+
     val_sample = ['test']
     print('hello')
 
@@ -34,62 +37,59 @@ def prep_val():
     img_val = np.ndarray((val_sample.__len__() * patch_per_batch, patch_size, patch_size, 1), dtype='float32')
     seg_val = np.ndarray((val_sample.__len__() * patch_per_batch, patch_size, patch_size, 1), dtype='float32')
     bm_dict = os.getcwd()
+    #bm_dict = scratch_dict + '/linc3132/data/Leaf_vein_binary'
     #Clahe'd stuff
-
     sequence_name = str(1)
     time = gmtime()
     print('No. ', sequence_name, ' starting time: ', str(time.tm_hour), ':', str(time.tm_min), ':', str(time.tm_sec))
+    #number of samples processed
     ks = 0
     for sample_val in val_sample:
         ks += 1
+        #number of passes
         k = 0
-        img_val_sample = np.ndarray((patch_per_batch, patch_size, patch_size, 1), dtype='float32')
         #each batch is an array of patches from a single image
+        img_val_sample = np.ndarray((patch_per_batch, patch_size, patch_size, 1), dtype='float32')
         seg_val_sample = np.ndarray((patch_per_batch, patch_size, patch_size, 1), dtype='float32')
+        
         roi_file = sample_val + '_roi.png'
-        #yellow
-        #now each pixel is between 0 and 1
-        roi = Image.open(os.path.join(bm_dict, roi_file)).convert("RGB")
-        roi = np.asarray(roi) / 255
+        roi = Image.open(os.path.join(bm_dict, roi_file)).convert("L")
+        roi = np.array(roi)
+
         img_file = sample_val + '_img.png'
         #plain image
         #file with segmentation drawn
         seg_file = sample_val + '_seg.png'
-        img = Image.open(os.path.join(bm_dict, img_file)).convert("RGB")
+        img = Image.open(os.path.join(bm_dict, img_file)).convert("L")
         img = np.asarray(img)
         #now each pixel is between 0 and 1
-        seg = Image.open(os.path.join(bm_dict, seg_file)).convert("RGB")
-        seg = np.asarray(seg) / 255
+        seg = Image.open(os.path.join(bm_dict, seg_file)).convert("L")
+        seg = np.array(seg)
+        #because the red segmentation color is below 127.5 so set to 0 otherwise
+        seg[np.nonzero(seg)] = 255
 
-        #making each image binary
+        #converting to binary
         roi[roi < 0] = 0
-        roi[(roi > 0) & (roi <= 0.5)] = 0
-        roi[(roi > 0.5) & (roi < 1)] = 1
-        roi[roi > 1] = 1
+        roi[(roi > 0) & (roi <= 127.5)] = 0
+        roi[(roi > 127.5)] = 1
+        #roi[roi > 255] = 1
         seg[seg < 0] = 0
-        seg[(seg > 0) & (seg <= 0.5)] = 0
-        seg[(seg > 0.5) & (seg < 1)] = 1
-        seg[seg > 1] = 1
+        seg[(seg > 0) & (seg <= 127.5)] = 0
+        seg[(seg > 127.5)] = 1
+        #seg[seg > 255] = 1
         seg[roi == 0] = 0
-        print(roi.shape)
-        print(seg.shape)
-        roi_img = Image.fromarray(roi, 'RGB')
-        seg_img = Image.fromarray(seg, 'RGB')
-        img_img = Image.fromarray(img, 'RGB')
-        roi_img.save('roi_img.png')
-        seg_img.save('seg_img.png')
-        img_img.save('img_img.png')
-        roi_img.show()
-        seg_img.show()
-        img_img.show()
 
+        #Length of nonzero region
         A = len(np.nonzero(roi)[0])
+        #approximate to square?
         D = np.sqrt(A)
         Ct = ndimage.measurements.center_of_mass(roi)
+        #finding bounding points
         x1 = int(Ct[0] - D)
         x2 = int(Ct[0] + D)
         y1 = int(Ct[1] - D)
         y2 = int(Ct[1] + D)
+        #ensuring bounding point is not off image
         if x1 < 0:
             x1 = 0
         if x2 > roi.shape[0]:
@@ -98,46 +98,61 @@ def prep_val():
             y1 = 0
         if y2 > roi.shape[1]:
             y2 = roi.shape[1]
+        #cutting out square region
         roi_c = roi[x1:x2, y1:y2]
         ang_choice = list(np.arange(0, 360, 1))
         ang_rotate = random.choice(ang_choice)
-        roi_t = Image.fromarray(roi_c)
+        roi_t = Image.fromarray(roi_c) #WHAT CHANNEL
         roi_t = roi_t.rotate(ang_rotate)
         roi_t = np.array(roi_t)
 
+        
         x = np.arange(0.75 * patch_size, roi_t.shape[0] - 0.75 * patch_size, 20)
         y = np.arange(0.75 * patch_size, roi_t.shape[1] - 0.75 * patch_size, 20)
         xx, yy = np.meshgrid(x, y, sparse=False)
+        #resized into vectors
         xx = np.resize(xx, (np.product(xx.shape)))
         yy = np.resize(yy, (np.product(yy.shape)))
+        #List of values from 0 to length of yy array
         kk = list(range(np.product(yy.shape)))
         while k < patch_per_batch:
             kc = np.random.choice(kk)
+            #pick a random coordinate in the mesh grid
             xc = xx[kc]
             yc = yy[kc]
+            #dimension of the bounding box
             window_size = patch_size * (1 + (np.random.rand(1) - 0.5) * 0.5)
             x_min = int(xc - window_size / 2)
             x_max = int(xc + window_size / 2)
             y_min = int(yc - window_size / 2)
             y_max = int(yc + window_size / 2)
+            #cutting patch out of rotated roi
             roi_p = roi_t[x_min:x_max, y_min:y_max]
 
+            #if entire patch is yellow
             if roi_p.min() == 1:
+                #section of image within roi bounding box
                 img_c = img[x1:x2, y1:y2]
+                #section of seg within roi bounding box
                 seg_c = seg[x1:x2, y1:y2]
 
                 img_t = Image.fromarray(img_c)
+                #rotates image by same factor
                 img_t = img_t.rotate(ang_rotate)
                 img_t = np.array(img_t)
                 seg_t = Image.fromarray(seg_c)
+                #rotates seg by same factor
                 seg_t = seg_t.rotate(ang_rotate)
                 seg_t = np.array(seg_t)
 
+                #extracting patch from rotated imgs/segs
                 img_p = img_t[x_min:x_max, y_min:y_max]
                 seg_p = seg_t[x_min:x_max, y_min:y_max]
 
+                #elastic deformation?
                 img_p = misc.imresize(img_p, (patch_size, patch_size))
                 seg_p = misc.imresize(seg_p, (patch_size, patch_size))
+                #converting to binary
                 seg_p[seg_p < 0] = 0
                 seg_p[(seg_p > 0) & (seg_p <= 0.5)] = 0
                 seg_p[(seg_p > 0.5) & (seg_p < 1)] = 1
@@ -163,27 +178,31 @@ def prep_val():
 def train(f_seq, exp_seq, scratch_dict, init_val, end_val):
     sample_list_dict = os.path.join(scratch_dict, 'linc3132/' + f_seq + '/data/sample_list', exp_seq)
     trn_file = 'trn_sample.npy'
-    #file names for only training
+    #original images
     trn_sample = np.load(os.path.join(sample_list_dict, trn_file))
 
     patch_size = 256
     patch_per_batch = 32
+    #CLAHEs of different files?
     data_folder = os.path.join(scratch_dict, 'linc3132/data/Leaf_vein_augment')
 
+    #patches
     val_dict = os.path.join(scratch_dict, 'linc3132/' + f_seq + '/data/val_data')
     for k_init in range(init_val, end_val, 1):
         print('Epoch:', str(k_init + 1))
+        #number of epochs
         k_init += 1
         img_trn = np.ndarray((trn_sample.__len__() * patch_per_batch, patch_size, patch_size, 1), dtype='float32')
         seg_trn = np.ndarray((trn_sample.__len__() * patch_per_batch, patch_size, patch_size, 1), dtype='float32')
         ks = 0
+        #going through each original image
         for sample_train in trn_sample:
             ks += 1
             sample_folder = os.path.join(data_folder, sample_train)
             folder_content = os.listdir(sample_folder)
             img_list = [x for x in folder_content if 'img' in x]
-            img_sample = img_list[k_init]
-            seg_sample = 'seg' + img_sample[3:]
+             = img_list[k_init]
+            seg_sample =img_sample 'seg' + img_sample[3:]
             img_trn_sample = np.load(os.path.join(sample_folder, img_sample))
             seg_trn_sample = np.load(os.path.join(sample_folder, seg_sample))
             img_trn[(ks - 1) * patch_per_batch:ks * patch_per_batch, ...] = img_trn_sample
@@ -196,62 +215,63 @@ def train(f_seq, exp_seq, scratch_dict, init_val, end_val):
 
         model_folder = os.path.join(scratch_dict, 'linc3132/' + f_seq + '/model', exp_seq)
         model_list = os.listdir(model_folder)
+        #only for first model
         if model_list.__len__() == 0:
             patch_rows = 256
             patch_cols = 256
             #added he_normal initialization
             inputs = Input((patch_rows, patch_cols, 1))
-            conv1 = Conv2D(32, (3, 3), activation='relu', padding='same', kernel_initializer='he_normal')(inputs)
+            conv1 = Conv2D(32, (3, 3), activation='relu', padding='same')(inputs)
             conv1 = BatchNormalization()(conv1)
-            conv1 = Conv2D(32, (3, 3), activation='relu', padding='same', kernel_initializer='he_normal')(conv1)
+            conv1 = Conv2D(32, (3, 3), activation='relu', padding='same')(conv1)
             conv1 = BatchNormalization()(conv1)
             pool1 = MaxPooling2D(pool_size=(2, 2))(conv1)
 
-            conv2 = Conv2D(64, (3, 3), activation='relu', padding='same', kernel_initializer='he_normal')(pool1)
+            conv2 = Conv2D(64, (3, 3), activation='relu', padding='same')(pool1)
             conv2 = BatchNormalization()(conv2)
-            conv2 = Conv2D(64, (3, 3), activation='relu', padding='same', kernel_initializer='he_normal')(conv2)
+            conv2 = Conv2D(64, (3, 3), activation='relu', padding='same')(conv2)
             conv2 = BatchNormalization()(conv2)
             pool2 = MaxPooling2D(pool_size=(2, 2))(conv2)
 
-            conv3 = Conv2D(128, (3, 3), activation='relu', padding='same', kernel_initializer='he_normal')(pool2)
+            conv3 = Conv2D(128, (3, 3), activation='relu', padding='same')(pool2)
             conv3 = BatchNormalization()(conv3)
-            conv3 = Conv2D(128, (3, 3), activation='relu', padding='same', kernel_initializer='he_normal')(conv3)
+            conv3 = Conv2D(128, (3, 3), activation='relu', padding='same')(conv3)
             conv3 = BatchNormalization()(conv3)
             pool3 = MaxPooling2D(pool_size=(2, 2))(conv3)
 
-            conv4 = Conv2D(256, (3, 3), activation='relu', padding='same', kernel_initializer='he_normal')(pool3)
+            conv4 = Conv2D(256, (3, 3), activation='relu', padding='same')(pool3)
             conv4 = BatchNormalization()(conv4)
-            conv4 = Conv2D(256, (3, 3), activation='relu', padding='same', kernel_initializer='he_normal')(conv4)
+            conv4 = Conv2D(256, (3, 3), activation='relu', padding='same')(conv4)
             conv4 = BatchNormalization()(conv4)
             pool4 = MaxPooling2D(pool_size=(2, 2))(conv4)
 
-            conv5 = Conv2D(512, (3, 3), activation='relu', padding='same', kernel_initializer='he_normal')(pool4)
+            conv5 = Conv2D(512, (3, 3), activation='relu', padding='same')(pool4)
             conv5 = BatchNormalization()(conv5)
-            conv5 = Conv2D(512, (3, 3), activation='relu', padding='same', kernel_initializer='he_normal')(conv5)
+            conv5 = Conv2D(512, (3, 3), activation='relu', padding='same')(conv5)
             conv5 = BatchNormalization()(conv5)
 
             up6 = concatenate([UpSampling2D(size=(2, 2))(conv5), conv4], axis=3)
-            conv6 = Conv2D(256, (3, 3), activation='relu', padding='same', kernel_initializer='he_normal')(up6)
+            conv6 = Conv2D(256, (3, 3), activation='relu', padding='same')(up6)
             conv6 = BatchNormalization()(conv6)
-            conv6 = Conv2D(256, (3, 3), activation='relu', padding='same', kernel_initializer='he_normal')(conv6)
+            conv6 = Conv2D(256, (3, 3), activation='relu', padding='same')(conv6)
             conv6 = BatchNormalization()(conv6)
 
             up7 = concatenate([UpSampling2D(size=(2, 2))(conv6), conv3], axis=3)
-            conv7 = Conv2D(128, (3, 3), activation='relu', padding='same', kernel_initializer='he_normal')(up7)
+            conv7 = Conv2D(128, (3, 3), activation='relu', padding='same')(up7)
             conv7 = BatchNormalization()(conv7)
-            conv7 = Conv2D(128, (3, 3), activation='relu', padding='same', kernel_initializer='he_normal')(conv7)
+            conv7 = Conv2D(128, (3, 3), activation='relu', padding='same')(conv7)
             conv7 = BatchNormalization()(conv7)
 
             up8 = concatenate([UpSampling2D(size=(2, 2))(conv7), conv2], axis=3)
-            conv8 = Conv2D(64, (3, 3), activation='relu', padding='same', kernel_initializer='he_normal')(up8)
+            conv8 = Conv2D(64, (3, 3), activation='relu', padding='same')(up8)
             conv8 = BatchNormalization()(conv8)
-            conv8 = Conv2D(64, (3, 3), activation='relu', padding='same', kernel_initializer='he_normal')(conv8)
+            conv8 = Conv2D(64, (3, 3), activation='relu', padding='same')(conv8)
             conv8 = BatchNormalization()(conv8)
 
             up9 = concatenate([UpSampling2D(size=(2, 2))(conv8), conv1], axis=3)
-            conv9 = Conv2D(32, (3, 3), activation='relu', padding='same', kernel_initializer='he_normal')(up9)
+            conv9 = Conv2D(32, (3, 3), activation='relu', padding='same')(up9)
             conv9 = BatchNormalization()(conv9)
-            conv9 = Conv2D(32, (3, 3), activation='relu', padding='same', kernel_initializer='he_normal')(conv9)
+            conv9 = Conv2D(32, (3, 3), activation='relu', padding='same')(conv9)
             conv9 = BatchNormalization()(conv9)
 
             conv10 = Conv2D(1, (1, 1), activation='sigmoid')(conv9)
@@ -260,20 +280,31 @@ def train(f_seq, exp_seq, scratch_dict, init_val, end_val):
 
             epoch_number = 0
 
+        #load the last saved model
         else:
+            #last save
+            #model_list contains the names of the model after each epoch
+            #^ is a listdir of model_folder
+            #below could be commented out
             model_file = model_list[-1]
             model_idx_list = []
+            #looping through each model name
             for model_sample in model_list:
+                #getting the digits of the model name
                 model_idx = int(model_sample[8:10])
                 model_idx_list.append(model_idx)
             epoch_number = int(np.max(model_idx_list))
+            #constructing file names?
             if epoch_number < 10:
+                #make two-digit
                 model_file_ref = model_file[0:8] + '0' + str(epoch_number) + model_file[10:11]
             else:
                 model_file_ref = model_file[0:8] + str(epoch_number) + model_file[10:11]
             for model_sample in model_list:
                 if model_file_ref in model_sample:
                     model_file = model_sample
+            #reading model file
+            #316-20 could be removed, they are due to a bug where optimizer_weights needs to be deleted
             f_model = h5py.File(os.path.join(model_folder, model_file), 'r+')
             if 'optimizer_weights' in f_model:
                 del f_model['optimizer_weights']
@@ -288,13 +319,17 @@ def train(f_seq, exp_seq, scratch_dict, init_val, end_val):
             file_name = 'weights.' + str(k_init) + '-{val_loss:.3f}.h5'
         model_check_file = os.path.join(model_folder, file_name)
 
+        #specifies location where the new model is to be saved
+        #may be a newer approach
         model_checkpoint = ModelCheckpoint(model_check_file, monitor='val_loss', save_best_only=False)
 
         model.fit(img_train, seg_train, batch_size=16, epochs=1, verbose=1, shuffle=True, validation_split=val_split,
                   callbacks=[model_checkpoint])
     return
 
+#similarity between the output seg image and hand-traced seg image
 def val_dice(f_seq, exp_seq, scratch_dict):
+    #all patches
     file_dict = os.path.join(scratch_dict, 'linc3132/' + f_seq + '/data/val_data', exp_seq)
     img_val_set = np.load(os.path.join(file_dict, 'img_val_1.npy'))
     seg_val_set = np.load(os.path.join(file_dict, 'seg_val_1.npy'))
@@ -304,6 +339,7 @@ def val_dice(f_seq, exp_seq, scratch_dict):
     epoch_number = 0
     model_file_init = model_list_init[0]
     model_list = []
+    #hopefully clarified by 291-311
     for model_num in range(len(model_list_init)):
         epoch_number += 1
         if epoch_number < 10:
@@ -316,6 +352,7 @@ def val_dice(f_seq, exp_seq, scratch_dict):
 
     D = []
     km = 0
+    #for each model, predicts the seg output vs hand-traced output and appends dice score to array D
     for model_file in model_list:
         km += 1
         print('Progress: ', km, '/', len(model_list))
@@ -363,6 +400,7 @@ def test(f_seq, exp_seq, scratch_dict, kt):
         msk_tst_sample = tst_case + '_slc.png'
         roi_tst_sample = tst_case + '_roi.png'
         seg_tst_sample = tst_case + '_seg.png'
+        #will break
         img = misc.imread(os.path.join(file_dict, img_tst_sample))
         msk = misc.imread(os.path.join(file_dict, msk_tst_sample))
         roi = misc.imread(os.path.join(file_dict, roi_tst_sample))
